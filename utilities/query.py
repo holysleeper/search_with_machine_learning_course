@@ -51,7 +51,7 @@ def create_prior_queries(doc_ids, doc_id_weights,
 # Hardcoded query here.  Better to use search templates or other query config.
 def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None, use_synonyms=False):
     query_name_field = "name.synonyms" if use_synonyms == True else "name"
-    print(query_name_field)
+    q_classifier = fasttext.load_model('/workspace/datasets/fasttext/model.bin')
     query_obj = {
         'size': size,
         "sort": [
