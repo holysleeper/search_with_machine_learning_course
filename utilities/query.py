@@ -16,7 +16,26 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(levelname)s:%(message)s')
+from sentence_transformers import SentenceTransformer
 
+logger.info("Creating Model")
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+def create_vector_query(query, size=10):
+     embedding = model.encode([query])[0]
+
+     em_query = {
+         "size": size,
+         "query": {
+             "knn": {
+                 "embedding": {
+                     "vector": embedding,
+                     "k": size
+                 }
+             }
+         }
+     }
+     return em_query
+ 
 # expects clicks and impressions to be in the row
 def create_prior_queries_from_group(
         click_group):  # total impressions isn't currently used, but it mayb worthwhile at some point
@@ -186,11 +205,14 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
     return query_obj
 
 
-def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc"):
+def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", use_vector_query=None):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
+    if use_vector_query:
+        query_obj = create_vector_query(user_query)
+    else:
+        query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
     logging.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
@@ -212,6 +234,9 @@ if __name__ == "__main__":
                          help='The OpenSearch port')
     general.add_argument('--user',
                          help='The OpenSearch admin.  If this is set, the program will prompt for password too. If not set, use default of admin/admin')
+    
+    general.add_argument('-v','--use_vector_query',
+                         help='Use vector query for the search!',action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
@@ -221,6 +246,7 @@ if __name__ == "__main__":
 
     host = args.host
     port = args.port
+    use_vector_query = args.use_vector_query
     if args.user:
         password = getpass()
         auth = (args.user, password)
@@ -241,11 +267,11 @@ if __name__ == "__main__":
     index_name = args.index
     query_prompt = "\nEnter your query (type 'Exit' to exit or hit ctrl-c):"
     print(query_prompt)
-    for line in fileinput.input():
+    for line in fileinput.input(('-', )):
         query = line.rstrip()
         if query == "Exit":
             break
-        search(client=opensearch, user_query=query, index=index_name)
+        search(client=opensearch, user_query=query, index=index_name, use_vector_query=use_vector_query)
 
         print(query_prompt)
 
